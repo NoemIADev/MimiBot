@@ -47,6 +47,8 @@ def retrieve_bdd(question, search_limit=15, final_limit=6, max_distance=0.75):
 
     results = []
     for row in rows:
+        clean_content = row[2].replace("**", "").replace("__", "")
+
         results.append(
             {
                 "title": row[0],
