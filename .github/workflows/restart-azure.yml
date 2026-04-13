@@ -11,7 +11,7 @@ jobs:
 
     steps:
       - name: Ping MimiFront
-        run: curl -I --max-time 30 https://mimifront-bjabgkefg2cmhh9.francecentral-01.azurewebsites.net || true
+        run: curl -I --max-time 30 https://mimifront-bjabgkefg2cmhmh9.francecentral-01.azurewebsites.net || true
 
       - name: Ping MimiBack
         run: curl -I --max-time 30 https://mimiback-ghfxgefkahf3f5e9.francecentral-01.azurewebsites.net/ || true
