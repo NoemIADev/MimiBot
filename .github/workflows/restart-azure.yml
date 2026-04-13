@@ -1,22 +1,17 @@
-name: Restart Azure Web Apps
+name: Ping Mimi
 
 on:
   schedule:
-    - cron: "*/30 * * * *"
+    - cron: "*/5 * * * *"
   workflow_dispatch:
 
 jobs:
-  restart:
+  ping:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Login to Azure
-        uses: azure/login@v2
-        with:
-          creds: ${{ secrets.AZURE_CREDENTIALS }}
+      - name: Ping MimiFront
+        run: curl -I --max-time 30 https://mimifront-bjabgkefg2cmhh9.francecentral-01.azurewebsites.net || true
 
-      - name: Restart MimiFront
-        run: az webapp restart --name MimiFront --resource-group mnajerusRG
-
-      - name: Restart MimiBack
-        run: az webapp restart --name MimiBack --resource-group mnajerusRG
+      - name: Ping MimiBack
+        run: curl -I --max-time 30 https://mimiback-ghfxgefkahf3f5e9.francecentral-01.azurewebsites.net/ || true
