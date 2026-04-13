@@ -24,6 +24,7 @@ def get_allowed_origins():
 
 
 allowed_origins = get_allowed_origins()
+print("ALLOWED_ORIGINS LOADED =", allowed_origins)
 
 app.add_middleware(
     CORSMiddleware,
