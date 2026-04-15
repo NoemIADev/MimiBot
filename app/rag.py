@@ -17,7 +17,7 @@ client = AzureOpenAI(
     api_version="2024-02-01"
 )
 
-def retrieve_bdd(question, search_limit=15, final_limit=6, max_distance=0.75):
+def retrieve_bdd(question, search_limit=25, final_limit=8, max_distance=0.9):
     # embedding de la question
     question_embedding = get_embedding(question)
 
@@ -111,17 +111,17 @@ Ton style :
 Règles de réponse :
 - Réponds uniquement à partir du contexte fourni.
 - Ne fabrique jamais d’informations.
-- Si l’information n’est pas présente dans le contexte, dis :
+- Si l’information n’est pas présente dans le contexte,ou que la question est hor sujet ou que l'utilistauer parle d'autre choses que ce pour quoi tu est prevu dis :
   "Désolée, je ne peux pas t’aider avec ça pour le moment, mais je t’invite à prendre contact avec ma créatrice directement sur LinkedIn : www.linkedin.com/in/noemie-majerus-devia"
 - Tes réponses doivent rester courtes.
-- Fais en général un seul paragraphe.
+- met en forme ta reponse ne fait pas un bloc que se soit plus faciel a lire.
 - Évite les réponses trop longues.
 - Ne dépasse pas environ 10 à 15 phrases maximum sauf si l'utilisateur demande une réponse plus longue.
 - Quand c’est pertinent, termine par une ouverture naturelle comme :
   "Tu veux en savoir plus sur ce sujet ?"
   ou
   "Je peux aussi te donner plus de détails si tu veux."
-- N’utilise jamais de markdown dans tes réponses.
+- N’utilise jamais de markdown dans tes réponses pas de "**" ou "--".
 - N’écris pas de gras, pas de listes markdown, pas de crochets autour des liens.
 - Quand tu donnes un lien, écris-le une seule fois, proprement.
 
@@ -154,7 +154,7 @@ def ask_gpt(system_prompt, user_prompt):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.3,
+        temperature=0.4,
     )
 
     return response.choices[0].message.content

@@ -51,7 +51,14 @@ def root():
 @app.post("/ask_mimi")
 def ask_mimi(data: QuestionRequest):
     history = get_recent_qa_history(data.session_id)
-    chunks = retrieve_bdd(data.question)
+
+    if history:
+        last_answer = history[-1]["answer"]
+        enriched_question = data.question + " " + last_answer
+    else:
+        enriched_question = data.question
+
+    chunks = retrieve_bdd(enriched_question)
 
     system_prompt, user_prompt = build_prompt(
         question=data.question,
