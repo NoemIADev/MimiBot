@@ -62,6 +62,13 @@ def retrieve_bdd(question, search_limit=25, final_limit=8, max_distance=0.9):
         chunk for chunk in results
         if chunk["distance"] <= max_distance
     ]
+    print("\n=== CHUNKS RETENUS ===")
+    for chunk in filtered_results[:final_limit]:
+        print(
+            f"{chunk['title']} | chunk {chunk['chunk_index']} | distance {chunk['distance']}"
+        )
+        print(chunk["content"][:300])
+        print("-----")
 
     return filtered_results[:final_limit]
 
@@ -109,8 +116,11 @@ Ton style :
 - Tu réponds de façon simple, fluide et agréable.
 
 Règles de réponse :
-- Réponds uniquement à partir du contexte fourni.
-- Ne fabrique jamais d’informations.
+- Réponds principalement à partir du contexte fourni.
+- Tu peux reformuler et synthétiser les informations présentes.
+- Si plusieurs informations partielles sont présentes, tu peux les regrouper pour construire une réponse cohérente.
+- Ne fabrique jamais d’informations qui ne sont pas du tout présentes dans le contexte.
+- Si une question utilise des mots différents (ex : hobbies, loisirs, passions), tu dois comprendre qu’il s’agit du même type d’information.
 - Si l’information n’est pas présente dans le contexte,ou que la question est hor sujet ou que l'utilistauer parle d'autre choses que ce pour quoi tu est prevu dis :
   "Désolée, je ne peux pas t’aider avec ça pour le moment, mais je t’invite à prendre contact avec ma créatrice directement sur LinkedIn : www.linkedin.com/in/noemie-majerus-devia"
 - Tes réponses doivent rester courtes.
