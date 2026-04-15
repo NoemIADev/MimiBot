@@ -17,7 +17,54 @@ client = AzureOpenAI(
     api_version="2024-02-01"
 )
 
-def retrieve_bdd(question, search_limit=25, final_limit=8, max_distance=0.9):
+def rewrite_query(question, history):
+    """
+    Reformule la question utilisateur pour améliorer la recherche RAG.
+    Ne répond pas à la question.
+    Retourne uniquement une requête de recherche plus claire et riche.
+    """
+
+    if not history:
+        history_text = "Aucun historique."
+    else:
+        history_parts = []
+        for item in history[-3:]:
+            part = (
+                f"Utilisateur : {item['question']}\n"
+                f"Mimi : {item['answer']}"
+            )
+            history_parts.append(part)
+
+        history_text = "\n\n".join(history_parts)
+
+    system_prompt = """
+Tu es un assistant chargé de reformuler des questions pour améliorer une recherche documentaire dans une base de connaissances.
+
+Règles :
+- Tu ne réponds jamais à la question.
+- Tu ne fabriques aucune information.
+- Tu reformules seulement la question pour qu’elle soit plus claire pour une recherche sémantique.
+- Tu peux expliciter l’intention de la question.
+- Tu peux ajouter des synonymes utiles.
+- Si l’historique aide à comprendre la question actuelle, utilise-le.
+- Retourne uniquement une seule reformulation, sans explication.
+""".strip()
+
+    user_prompt = f"""
+Historique :
+{history_text}
+
+Question actuelle :
+{question}
+
+Reformule cette question pour optimiser une recherche dans une base de connaissances sur Noémie, son profil, ses projets, ses compétences et ses centres d’intérêt.
+""".strip()
+
+    rewritten_query = ask_gpt(system_prompt, user_prompt)
+    return rewritten_query.strip()
+
+
+def retrieve_bdd(question, search_limit=20, final_limit=8, max_distance=0.9):
     # embedding de la question
     question_embedding = get_embedding(question)
 
@@ -73,6 +120,9 @@ def retrieve_bdd(question, search_limit=25, final_limit=8, max_distance=0.9):
     return filtered_results[:final_limit]
 
 
+
+
+
 def build_prompt(question, chunks, history):
     # historique conversationnel
     if not history:
@@ -121,7 +171,7 @@ Règles de réponse :
 - Si plusieurs informations partielles sont présentes, tu peux les regrouper pour construire une réponse cohérente.
 - Ne fabrique jamais d’informations qui ne sont pas du tout présentes dans le contexte.
 - Si une question utilise des mots différents (ex : hobbies, loisirs, passions), tu dois comprendre qu’il s’agit du même type d’information.
-- Si l’information n’est pas présente dans le contexte,ou que la question est hor sujet ou que l'utilistauer parle d'autre choses que ce pour quoi tu est prevu dis :
+- Si tu ne peut pas repondre dis :
   "Désolée, je ne peux pas t’aider avec ça pour le moment, mais je t’invite à prendre contact avec ma créatrice directement sur LinkedIn : www.linkedin.com/in/noemie-majerus-devia"
 - Tes réponses doivent rester courtes.
 - met en forme ta reponse ne fait pas un bloc que se soit plus faciel a lire.

@@ -6,8 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from db import get_db_connection, save_qa_history, get_recent_qa_history
-from rag import retrieve_bdd, build_prompt, ask_gpt
-
+from rag import retrieve_bdd, build_prompt, ask_gpt, rewrite_query
 load_dotenv()
 
 app = FastAPI()
@@ -52,13 +51,13 @@ def root():
 def ask_mimi(data: QuestionRequest):
     history = get_recent_qa_history(data.session_id)
 
-    if history:
-        last_answer = history[-1]["answer"]
-        enriched_question = data.question + " " + last_answer
-    else:
-        enriched_question = data.question
+    rewritten_query = rewrite_query(data.question, history)
+    print("\n=== QUESTION ORIGINALE ===")
+    print(data.question)
+    print("\n=== QUESTION REFORMULÉE ===")
+    print(rewritten_query)
 
-    chunks = retrieve_bdd(enriched_question)
+    chunks = retrieve_bdd(rewritten_query)
 
     system_prompt, user_prompt = build_prompt(
         question=data.question,
