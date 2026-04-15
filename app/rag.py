@@ -2,6 +2,7 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 from openai import AzureOpenAI
+import re
 
 from embeddings import get_embedding
 from db import get_db_connection
@@ -171,9 +172,10 @@ Règles de réponse :
 - Si plusieurs informations partielles sont présentes, tu peux les regrouper pour construire une réponse cohérente.
 - Ne fabrique jamais d’informations qui ne sont pas du tout présentes dans le contexte.
 - Si une question utilise des mots différents (ex : hobbies, loisirs, passions), tu dois comprendre qu’il s’agit du même type d’information.
-- Si tu ne peut pas repondre dis :
+- Si l’information n’est pas présente dans le contexte, ou que la question est hors sujet, ou que l’utilisateur parle d’autre chose que ce pour quoi tu es prévue, dis :
   "Désolée, je ne peux pas t’aider avec ça pour le moment, mais je t’invite à prendre contact avec ma créatrice directement sur LinkedIn : www.linkedin.com/in/noemie-majerus-devia"
-- Tes réponses doivent rester courtes.
+- Exception : si la question porte sur un projet de Noémie et que tu n’as pas assez d’informations pour le détailler, donne d’abord les éléments disponibles, puis ajoute :
+  "Pour en voir plus, tu peux aussi consulter son GitHub : https://github.com/NoemIADev ou son LinkedIn : www.linkedin.com/in/noemie-majerus-devia"
 - met en forme ta reponse ne fait pas un bloc que se soit plus faciel a lire.
 - Évite les réponses trop longues.
 - Ne dépasse pas environ 10 à 15 phrases maximum sauf si l'utilisateur demande une réponse plus longue.
@@ -214,10 +216,14 @@ def ask_gpt(system_prompt, user_prompt):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.4,
+        temperature=0.3,
     )
+    content = response.choices[0].message.content
 
-    return response.choices[0].message.content
+    content = re.sub(r"\*\*(.*?)\*\*", r"\1", content)
+    content = re.sub(r"\*(.*?)\*", r"\1", content)
+    content = content.replace("•", "-")
+    return content.strip()
 
 
 def ask_mimi_rag(question):
