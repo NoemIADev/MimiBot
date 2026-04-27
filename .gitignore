@@ -2,6 +2,9 @@
 mimivenv/
 __pycache__/
 *.pyc
+
 Frontend/node_modules/
 Frontend/.env.local
-/dataset
+Frontend/dist/
+
+dataset/
