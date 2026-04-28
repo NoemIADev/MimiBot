@@ -1,29 +1,39 @@
-from typing import Any
-
 from fastapi import FastAPI
 from pydantic import BaseModel
 
-from .agent import process_user_message
+from agent.agent import do_actions
 
-app = FastAPI(title="Mimi Agent Demo API")
+app = FastAPI(title="Agent Execution API")
 
 
-class AgentMessageRequest(BaseModel):
-    """Body attendu pour exécuter une demande utilisateur sur l'agent."""
-
-    message: str
+class ActionType(BaseModel):
+    """
+    Représente une action à exécuter.
+    """
+    name: str
+    param: list[str | int | tuple]
 
 
 @app.get("/")
-def read_root() -> dict[str, str]:
-    """Endpoint de santé de l'API agent."""
+def read_root():
+    """
+    Vérifie que l'API agent fonctionne.
+    """
     return {"message": "API agent active"}
 
 
-@app.post("/run")
-def run_agent(request: AgentMessageRequest) -> dict[str, Any]:
-    """Exécute le pipeline agent complet à partir d'un message utilisateur."""
-    print(f"[API AGENT] Body reçu : {request.model_dump()}")
-    response = process_user_message(request.message)
-    print(f"[API AGENT] Réponse agent : {response}")
-    return response
+@app.post("/agent")
+def run_actions(list_of_actions: list[ActionType]):
+    """
+    Exécute une liste d'actions.
+    """
+    print("[POST AGENT] Body reçu :", list_of_actions)
+
+    results = do_actions(list_of_actions)
+
+    print("[POST AGENT] Résultats :", results)
+
+    return {
+        "message": "actions executees",
+        "results": results
+    }

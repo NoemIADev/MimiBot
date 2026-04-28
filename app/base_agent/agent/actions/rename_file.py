@@ -1,28 +1,15 @@
-from pathlib import Path
+import os
 
-
-def rename_file(old_name: str, new_name: str) -> str:
-    """Renomme un fichier existant.
+def rename_file(old_name, new_name):
+    """
+    Renomme un fichier existant.
 
     Args:
-        old_name: Ancien chemin du fichier.
-        new_name: Nouveau chemin du fichier.
-
-    Returns:
-        Un message décrivant le résultat du renommage.
+        old_name: ancien nom du fichier
+        new_name: nouveau nom du fichier
     """
-    print(f"[ACTION] Renommage du fichier : {old_name} -> {new_name}")
-    old_path = Path(old_name).expanduser().resolve()
-    new_path = Path(new_name).expanduser().resolve()
-
-    if not old_path.exists():
-        message = f"Le fichier source '{old_path}' n'existe pas."
-        print(f"[ACTION][WARN] {message}")
-        return message
-
-    new_path.parent.mkdir(parents=True, exist_ok=True)
-    old_path.rename(new_path)
-
-    message = f"Fichier renommé : {old_path} -> {new_path}"
-    print(f"[OK] {message}")
-    return message
+    if os.path.exists(old_name):
+        os.rename(old_name, new_name)
+        return f"Fichier renommé : {old_name} -> {new_name}"
+    else:
+        return f"Le fichier n'existe pas : {old_name}"
