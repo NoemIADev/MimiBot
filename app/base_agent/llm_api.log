@@ -1,0 +1,5 @@
+INFO:     Will watch for changes in these directories: ['/home/noemie/Documents/code/Mimi/app/base_agent']
+INFO:     Uvicorn running on http://127.0.0.1:8010 (Press CTRL+C to quit)
+INFO:     Started reloader process [496366] using StatReload
+ERROR:    Error loading ASGI app. Could not import module "llm".
+INFO:     Stopping reloader process [496366]

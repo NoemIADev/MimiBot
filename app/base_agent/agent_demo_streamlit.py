@@ -1,46 +1,61 @@
-"""Front Streamlit minimal pour parler à l'API agent de démo."""
-
 import os
 
 import requests
 import streamlit as st
 
 
-API_URL = os.getenv("AGENT_API_URL", "http://127.0.0.1:8010/run")
+API_URL = "http://127.0.0.1:8010/run"
 
 
-st.set_page_config(page_title="Mimi Agent Demo", page_icon="🤖")
-st.title("🤖 Mimi Agent Demo")
-st.caption("Interface simple pour tester les actions de l'agent")
+st.set_page_config(page_title="Agent Chat", page_icon="🤖")
+st.title("🤖 Agent Chat")
+st.caption("Interface simple pour parler au bot")
 
-if "history" not in st.session_state:
-    st.session_state.history = []
 
-user_input = st.text_area(
-    "Message utilisateur",
-    placeholder="Ex: Ajoute un document nommé test_agent avec ce texte : Bonjour ceci est un test",
-    height=120,
-)
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-if st.button("Envoyer au bot"):
-    if not user_input.strip():
-        st.warning("Merci d'écrire un message.")
-    else:
+
+# affichage de l'historique
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.write(message["content"])
+
+
+# champ de saisie utilisateur
+user_input = st.chat_input("Écris ton message ici...")
+
+
+if user_input:
+    # on ajoute le message user dans l'historique
+    st.session_state.messages.append({
+        "role": "user",
+        "content": user_input
+    })
+
+    # on affiche directement le message user
+    with st.chat_message("user"):
+        st.write(user_input)
+
+    try:
         payload = {"message": user_input}
-        st.write("Payload envoyé :", payload)
 
-        try:
-            response = requests.post(API_URL, json=payload, timeout=60)
-            response.raise_for_status()
-            data = response.json()
-            st.session_state.history.append({"request": payload, "response": data})
-            st.success("Réponse reçue")
-            st.json(data)
-        except Exception as exc:
-            st.error(f"Erreur pendant l'appel API : {exc}")
+        response = requests.post(API_URL, json=payload, timeout=60)
+        response.raise_for_status()
+        data = response.json()
 
-st.subheader("Historique local")
-for idx, item in enumerate(reversed(st.session_state.history), start=1):
-    st.markdown(f"### Échange {idx}")
-    st.write("Requête :", item["request"])
-    st.json(item["response"])
+        # on récupère la réponse du bot
+        bot_response = data.get("response", "Pas de réponse renvoyée par l'API.")
+
+    except Exception as exc:
+        bot_response = f"Erreur pendant l'appel API : {exc}"
+
+    # on ajoute la réponse bot dans l'historique
+    st.session_state.messages.append({
+        "role": "assistant",
+        "content": bot_response
+    })
+
+    # on affiche la réponse bot
+    with st.chat_message("assistant"):
+        st.write(bot_response)

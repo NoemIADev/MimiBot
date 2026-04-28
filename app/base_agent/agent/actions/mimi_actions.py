@@ -31,19 +31,35 @@ def create_markdown_file(document_name: str, text: str) -> str:
     return str(file_path)
 
 
-def ingest_single_document_to_db(file_path: str) -> int:
-    """Ingère un document markdown unique dans PostgreSQL sans reset global.
+def ingest_single_document_to_db(document_name: str) -> int:
+    """
+    Ingère un document markdown depuis le dossier dataset.
 
     Args:
-        file_path: Chemin du fichier markdown à ingérer.
+        document_name: nom du fichier (ex: "test" ou "test.md")
 
     Returns:
-        Le nombre de chunks insérés pour ce document.
+        nombre de chunks insérés
     """
-    # Import local pour éviter de charger ingest_script tant que non nécessaire.
     from ingest_script import ingest_single_document
 
-    print(f"[ACTION] Ingestion du document en base : {file_path}")
-    inserted_chunks = ingest_single_document(Path(file_path))
-    print(f"[OK] Document ajouté avec succès ({inserted_chunks} chunks)")
+    print(f"[ACTION] Ingestion demandée : {document_name}")
+    
+    project_root = APP_DIR.parent
+    dataset_dir = project_root / "dataset"
+
+    # on ajoute .md si besoin
+    if not document_name.endswith(".md"):
+        document_name += ".md"
+
+    file_path = dataset_dir / document_name
+
+    if not file_path.exists():
+        raise FileNotFoundError(f"Fichier introuvable : {file_path}")
+
+    print(f"[ACTION] Ingestion du fichier : {file_path}")
+
+    inserted_chunks = ingest_single_document(file_path)
+
+    print(f"[OK] Document ajouté ({inserted_chunks} chunks)")
     return inserted_chunks
