@@ -100,8 +100,7 @@ Suite à ces constats, plusieurs améliorations ont été mises en place :
 - organisation par thématiques (présentation, projets, etc.)
 
 ### ✅ Pipeline d’ingestion optimisé
-- reset automatique des données
-- chunking avec overlap pour garder le contexte
+- création d'un agent qui crée insert les document dans la base de données
 
 ---
 
