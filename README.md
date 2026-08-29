@@ -9,10 +9,10 @@ L’objectif est simple : permettre à un recruteur ou un visiteur de poser des 
 ## ✨ Aperçu
 
 Mimi est une assistante conversationnelle qui :
-- répond aux questions sur Noémie (profil, projets, compétences)
+- répond aux questions sur Moi (profil, projets, compétences)
 - utilise une base de connaissances personnalisée (documents markdown)
 - s’appuie sur un système RAG pour générer des réponses contextualisées
-- garde un historique de conversation pour améliorer la pertinence
+- garde un historique de conversation anonyme pour améliorer la pertinence
 
 ---
 
