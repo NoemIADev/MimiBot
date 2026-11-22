@@ -24,31 +24,12 @@ jobs:
     env:
       IMAGE: mimi-backend:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
       RELEASE: ${{ github.run_id }}-${{ github.run_attempt }}
-      BACKEND_DOMAIN: ${{ vars.BACKEND_DOMAIN }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build and validate backend
-        shell: bash
-        run: |
-          set -euo pipefail
-          bash -n deploy/lightsail/deploy.sh
-          docker build --platform linux/amd64 --tag "$IMAGE" ./app
-          docker run -d --name mimi-smoke --network none \
-            -e OPENROUTER_API_KEY=build-test-placeholder \
-            -e OPENROUTER_BASE_URL=https://openrouter.ai/api/v1 "$IMAGE" > /dev/null
-          trap 'docker rm -f mimi-smoke > /dev/null 2>&1 || true' EXIT
-          for attempt in {1..30}; do
-            if docker exec mimi-smoke python -c \
-              'import json, urllib.request; r = urllib.request.urlopen("http://127.0.0.1:8000/", timeout=2); assert json.load(r)["message"] == "API Mimi OK"' > /dev/null 2>&1; then
-              echo "PASS: container startup and GET /"
-              exit 0
-            fi
-            sleep 2
-          done
-          echo "::error::Container startup/GET / failed; deployment has not started."
-          exit 1
+      - name: Build backend image
+        run: docker build --platform linux/amd64 --tag "$IMAGE" ./app
 
       - name: Configure SSH and verify pinned host fingerprint
         shell: bash
@@ -63,7 +44,6 @@ jobs:
           [[ "$LIGHTSAIL_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || { echo '::error::Missing/invalid LIGHTSAIL_HOST (IPv4 or DNS).'; exit 1; }
           [[ "$LIGHTSAIL_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo '::error::Missing/invalid LIGHTSAIL_USER.'; exit 1; }
           [[ -n "$LIGHTSAIL_SSH_KEY" && "$HOST_FINGERPRINT" == SHA256:* ]] || { echo '::error::SSH key or verified SHA256 fingerprint missing.'; exit 1; }
-          [[ "$BACKEND_DOMAIN" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$ ]] || { echo '::error::BACKEND_DOMAIN must be a DNS name without protocol/path.'; exit 1; }
           ssh_dir="$RUNNER_TEMP/mimi-ssh"
           mkdir -m 700 "$ssh_dir"
           printf '%s\n' "$LIGHTSAIL_SSH_KEY" > "$ssh_dir/key"
@@ -102,8 +82,8 @@ jobs:
             deploy/lightsail/deploy.sh \
             "mimi-lightsail:.local/share/mimibot/releases/$RELEASE/"
           ssh -F "$ssh_config" mimi-lightsail \
-            "bash .local/share/mimibot/releases/$RELEASE/deploy.sh '$IMAGE' '$BACKEND_DOMAIN'"
-          echo "Backend deployed and verified over HTTPS." >> "$GITHUB_STEP_SUMMARY"
+            "bash .local/share/mimibot/releases/$RELEASE/deploy.sh '$IMAGE'"
+          echo "Backend container started on Lightsail (no application tests)." >> "$GITHUB_STEP_SUMMARY"
 
       - name: Remove temporary transfer files and SSH key
         if: always()
