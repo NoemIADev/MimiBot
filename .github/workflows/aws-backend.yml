@@ -1,10 +1,11 @@
-name: Build and deploy backend to AWS App Runner
+name: Deploy backend to Lightsail
 
 on:
   push:
     branches: [main]
     paths:
       - "app/**"
+      - "deploy/lightsail/**"
       - ".github/workflows/aws-backend.yml"
   workflow_dispatch:
 
@@ -12,135 +13,107 @@ permissions:
   contents: read
 
 concurrency:
-  group: aws-backend-production
+  group: lightsail-backend-production
   cancel-in-progress: false
 
 jobs:
   deploy:
     if: github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    timeout-minutes: 40
-    permissions:
-      contents: read
-      id-token: write
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
     env:
-      AWS_REGION: ${{ vars.AWS_REGION }}
-      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
-      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
-      APP_RUNNER_SERVICE_ARN: ${{ vars.APP_RUNNER_SERVICE_ARN }}
-      AWS_PAGER: ""
+      IMAGE: mimi-backend:${{ github.sha }}-${{ github.run_id }}-${{ github.run_attempt }}
+      RELEASE: ${{ github.run_id }}-${{ github.run_attempt }}
+      BACKEND_DOMAIN: ${{ vars.BACKEND_DOMAIN }}
 
     steps:
       - uses: actions/checkout@v4
 
-      - name: Validate deployment settings
+      - name: Build and validate backend
         shell: bash
         run: |
           set -euo pipefail
-          for name in AWS_REGION AWS_ROLE_ARN ECR_REPOSITORY APP_RUNNER_SERVICE_ARN; do
-            if [[ -z "${!name}" ]]; then
-              echo "::error::Missing GitHub Actions repository variable: $name"
-              exit 1
-            fi
-          done
-
-      - name: Build backend image
-        run: docker build --tag mimi-backend:test ./app
-
-      - name: Check container startup without external services
-        shell: bash
-        run: |
-          set -euo pipefail
+          bash -n deploy/lightsail/deploy.sh
+          docker build --platform linux/amd64 --tag "$IMAGE" ./app
           docker run -d --name mimi-smoke --network none \
             -e OPENROUTER_API_KEY=build-test-placeholder \
-            -e OPENROUTER_BASE_URL=https://openrouter.ai/api/v1 \
-            mimi-backend:test
-          trap 'docker logs mimi-smoke; docker rm -f mimi-smoke' EXIT
+            -e OPENROUTER_BASE_URL=https://openrouter.ai/api/v1 "$IMAGE" > /dev/null
+          trap 'docker rm -f mimi-smoke > /dev/null 2>&1 || true' EXIT
           for attempt in {1..30}; do
             if docker exec mimi-smoke python -c \
-              'import json, urllib.request; r = urllib.request.urlopen("http://127.0.0.1:8000/", timeout=2); assert json.load(r)["message"] == "API Mimi OK"'; then
+              'import json, urllib.request; r = urllib.request.urlopen("http://127.0.0.1:8000/", timeout=2); assert json.load(r)["message"] == "API Mimi OK"' > /dev/null 2>&1; then
+              echo "PASS: container startup and GET /"
               exit 0
             fi
             sleep 2
           done
-          echo "::error::Backend container did not become healthy"
+          echo "::error::Container startup/GET / failed; deployment has not started."
           exit 1
 
-      - name: Authenticate to AWS using GitHub OIDC
-        uses: aws-actions/configure-aws-credentials@v5
-        with:
-          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
-          aws-region: ${{ vars.AWS_REGION }}
-          role-session-name: mimi-${{ github.run_id }}
-
-      - name: Log in to Amazon ECR
-        id: ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-      - name: Push versioned backend image
-        id: image
-        env:
-          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+      - name: Configure SSH and verify pinned host fingerprint
         shell: bash
-        run: |
-          set -euo pipefail
-          image="$ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
-          docker tag mimi-backend:test "$image"
-          docker push "$image"
-          echo "uri=$image" >> "$GITHUB_OUTPUT"
-
-      - name: Deploy image and preserve App Runner runtime settings
-        id: deploy
         env:
-          IMAGE_URI: ${{ steps.image.outputs.uri }}
-        shell: bash
+          LIGHTSAIL_HOST: ${{ secrets.LIGHTSAIL_HOST }}
+          LIGHTSAIL_USER: ${{ secrets.LIGHTSAIL_USER }}
+          LIGHTSAIL_SSH_KEY: ${{ secrets.LIGHTSAIL_SSH_KEY }}
+          HOST_FINGERPRINT: ${{ vars.LIGHTSAIL_SSH_FINGERPRINT }}
         run: |
           set -euo pipefail
           umask 077
-          service_file="$RUNNER_TEMP/mimi-service.json"
-          source_file="$RUNNER_TEMP/mimi-source.json"
-          trap 'rm -f "$service_file" "$source_file"' EXIT
-          aws apprunner describe-service --service-arn "$APP_RUNNER_SERVICE_ARN" > "$service_file"
-          jq -e '.Service.Status == "RUNNING" and .Service.SourceConfiguration.ImageRepository.ImageRepositoryType == "ECR"' "$service_file" > /dev/null
-          # Retain environment variables, secret references and ECR access role.
-          jq --arg image "$IMAGE_URI" '
-            .Service.SourceConfiguration
-            | .ImageRepository.ImageIdentifier = $image
-            | .ImageRepository.ImageConfiguration.Port = "8000"
-            | .AutoDeploymentsEnabled = false
-          ' "$service_file" > "$source_file"
-          operation=$(aws apprunner update-service \
-            --service-arn "$APP_RUNNER_SERVICE_ARN" \
-            --source-configuration "file://$source_file" \
-            --query OperationId --output text)
-          echo "operation=$operation" >> "$GITHUB_OUTPUT"
+          [[ "$LIGHTSAIL_HOST" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*$ ]] || { echo '::error::Missing/invalid LIGHTSAIL_HOST (IPv4 or DNS).'; exit 1; }
+          [[ "$LIGHTSAIL_USER" =~ ^[a-z_][a-z0-9_-]*$ ]] || { echo '::error::Missing/invalid LIGHTSAIL_USER.'; exit 1; }
+          [[ -n "$LIGHTSAIL_SSH_KEY" && "$HOST_FINGERPRINT" == SHA256:* ]] || { echo '::error::SSH key or verified SHA256 fingerprint missing.'; exit 1; }
+          [[ "$BACKEND_DOMAIN" =~ ^[a-zA-Z0-9][a-zA-Z0-9.-]*\.[a-zA-Z]{2,}$ ]] || { echo '::error::BACKEND_DOMAIN must be a DNS name without protocol/path.'; exit 1; }
+          ssh_dir="$RUNNER_TEMP/mimi-ssh"
+          mkdir -m 700 "$ssh_dir"
+          printf '%s\n' "$LIGHTSAIL_SSH_KEY" > "$ssh_dir/key"
+          # A scanned key is trusted ONLY after matching the out-of-band fingerprint.
+          ssh-keyscan -T 10 -t ed25519 "$LIGHTSAIL_HOST" > "$ssh_dir/scanned" 2>/dev/null
+          actual=$(ssh-keygen -lf "$ssh_dir/scanned" -E sha256 | awk '{print $2}' | sort -u)
+          [[ "$actual" == "$HOST_FINGERPRINT" ]] || { echo '::error::SSH host fingerprint mismatch. No SSH connection made.'; exit 1; }
+          mv "$ssh_dir/scanned" "$ssh_dir/known_hosts"
+          cat > "$ssh_dir/config" <<EOF
+          Host mimi-lightsail
+            HostName $LIGHTSAIL_HOST
+            User $LIGHTSAIL_USER
+            IdentityFile $ssh_dir/key
+            UserKnownHostsFile $ssh_dir/known_hosts
+            GlobalKnownHostsFile /dev/null
+            StrictHostKeyChecking yes
+            HostKeyAlgorithms ssh-ed25519
+            IdentitiesOnly yes
+            BatchMode yes
+            ConnectTimeout 15
+            ServerAliveInterval 15
+            ServerAliveCountMax 4
+          EOF
+          echo "PASS: SSH host identity verified"
 
-      - name: Wait for this deployment and check HTTP health
-        env:
-          OPERATION_ID: ${{ steps.deploy.outputs.operation }}
+      - name: Transfer image and deploy with rollback
         shell: bash
         run: |
           set -euo pipefail
-          for attempt in {1..80}; do
-            status=$(aws apprunner list-operations --service-arn "$APP_RUNNER_SERVICE_ARN" \
-              --query "OperationSummaryList[?Id=='$OPERATION_ID'].Status | [0]" --output text)
-            echo "Deployment status: $status"
-            case "$status" in
-              SUCCEEDED)
-                url=$(aws apprunner describe-service --service-arn "$APP_RUNNER_SERVICE_ARN" \
-                  --query Service.ServiceUrl --output text)
-                curl --fail --silent --show-error --retry 5 --retry-delay 5 \
-                  --connect-timeout 10 --max-time 30 "https://$url/" \
-                  | python -c 'import json, sys; assert json.load(sys.stdin)["message"] == "API Mimi OK"'
-                echo "Backend deployed: https://$url" >> "$GITHUB_STEP_SUMMARY"
-                exit 0
-                ;;
-              FAILED|ROLLBACK_IN_PROGRESS|ROLLBACK_FAILED|ROLLBACK_SUCCEEDED)
-                echo "::error::App Runner deployment failed: $status"
-                exit 1
-                ;;
-            esac
-            sleep 15
-          done
-          echo "::error::Timed out waiting for App Runner deployment"
-          exit 1
+          ssh_config="$RUNNER_TEMP/mimi-ssh/config"
+          docker save "$IMAGE" | gzip -1 > "$RUNNER_TEMP/image.tar.gz"
+          (cd "$RUNNER_TEMP" && sha256sum image.tar.gz > image.sha256)
+          ssh -F "$ssh_config" mimi-lightsail \
+            "umask 077; mkdir -p .local/share/mimibot/releases; mkdir .local/share/mimibot/releases/$RELEASE"
+          scp -q -F "$ssh_config" "$RUNNER_TEMP/image.tar.gz" "$RUNNER_TEMP/image.sha256" \
+            deploy/lightsail/deploy.sh \
+            "mimi-lightsail:.local/share/mimibot/releases/$RELEASE/"
+          ssh -F "$ssh_config" mimi-lightsail \
+            "bash .local/share/mimibot/releases/$RELEASE/deploy.sh '$IMAGE' '$BACKEND_DOMAIN'"
+          echo "Backend deployed and verified over HTTPS." >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Remove temporary transfer files and SSH key
+        if: always()
+        shell: bash
+        run: |
+          ssh_dir="$RUNNER_TEMP/mimi-ssh"
+          if [[ -f "$ssh_dir/config" ]]; then
+            ssh -F "$ssh_dir/config" mimi-lightsail \
+              "rm -f .local/share/mimibot/releases/$RELEASE/image.tar.gz .local/share/mimibot/releases/$RELEASE/image.sha256" \
+              > /dev/null 2>&1 || true
+          fi
+          rm -f "$RUNNER_TEMP/image.tar.gz" "$RUNNER_TEMP/image.sha256"
+          rm -rf "$ssh_dir"

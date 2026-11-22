@@ -1,0 +1,4 @@
+# Replace api.example.com with the DNS name pointing to the Lightsail static IP.
+api.example.com {
+    reverse_proxy 127.0.0.1:8000
+}
