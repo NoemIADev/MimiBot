@@ -4,7 +4,7 @@ from pathlib import Path
 import requests
 from dotenv import load_dotenv
 from fastapi import FastAPI
-from openai import AzureOpenAI
+from openai import OpenAI
 from pydantic import BaseModel
 
 from agent.agent import get_actions
@@ -16,10 +16,9 @@ load_dotenv(ENV_PATH)
 
 app = FastAPI(title="LLM API")
 
-client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version=os.getenv("AZURE_OPENAI_API_VERSION"),
+client = OpenAI(
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    base_url=os.getenv("OPENROUTER_BASE_URL"),
 )
 
 AGENT_API_URL = "http://127.0.0.1:8000/agent"
@@ -71,7 +70,7 @@ Use this format:
         max_tokens=1000,
         temperature=0,
         top_p=1,
-        model="gpt-5-chat"
+        model=os.getenv("OPENROUTER_LLM_MODEL")
     )
 
     return response.choices[0].message.content

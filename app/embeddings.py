@@ -1,21 +1,23 @@
 import os
-from pathlib import Path
-from dotenv import load_dotenv
-from openai import AzureOpenAI
+import config  # Load .env.local / .env without overriding Azure settings.
+from openai import OpenAI
 
 # charge explicitement le .env à la racine du projet
-BASE_DIR = Path(__file__).resolve().parent.parent
-load_dotenv(BASE_DIR / ".env")
 
-client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version="2024-02-01"
+client = OpenAI(
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    base_url=os.getenv("OPENROUTER_BASE_URL"),
 )
 
 def get_embedding(text):
+    dimensions = os.getenv("OPENROUTER_EMBEDDING_DIMENSIONS")
+    options = {"dimensions": int(dimensions)} if dimensions else {}
     response = client.embeddings.create(
-        model=os.getenv("AZURE_OPENAI_EMBEDDING_DEPLOYMENT"),
-        input=text
+        model=os.getenv("OPENROUTER_EMBEDDING_MODEL"),
+        input=text,
+        **options,
     )
-    return response.data[0].embedding
+    embedding = response.data[0].embedding
+    if dimensions and len(embedding) != int(dimensions):
+        raise ValueError(f"Embedding provider returned {len(embedding)} dimensions; expected {dimensions}")
+    return embedding

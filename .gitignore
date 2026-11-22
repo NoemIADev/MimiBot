@@ -1,4 +1,6 @@
 .env
+.env.local
+.venv/
 mimivenv/
 __pycache__/
 *.pyc
@@ -8,3 +10,5 @@ Frontend/.env.local
 Frontend/dist/
 
 dataset/
+.neon
+node_modules/

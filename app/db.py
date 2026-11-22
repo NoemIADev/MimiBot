@@ -1,18 +1,20 @@
 import os
 
 import psycopg2
-from dotenv import load_dotenv
-from embeddings import get_embedding
-
-load_dotenv()
+import config  # Load local env files before resolving the connection string.
 
 def get_db_connection():
-    return psycopg2.connect(os.getenv("DATABASE_URL"))
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError("DATABASE_URL is missing. Run neon deploy or configure the backend environment.")
+    return psycopg2.connect(database_url, connect_timeout=15)
 
 
 
 
 def save_qa_history(session_id, question, answer):
+    from embeddings import get_embedding
+
     question_embedding = get_embedding(question)
     vector_str = "[" + ",".join(str(x) for x in question_embedding) + "]"
 

@@ -1,11 +1,12 @@
 --==== Postgre + pgvector ====
+CREATE EXTENSION IF NOT EXISTS vector;
 
 
 
 -- =========================
 -- TABLE DOCUMENTS
 -- =========================
-CREATE TABLE documents (
+CREATE TABLE IF NOT EXISTS documents (
     id SERIAL PRIMARY KEY,
     title TEXT,
     source_name TEXT,
@@ -17,7 +18,7 @@ CREATE TABLE documents (
 -- =========================
 -- TABLE CHUNKS
 -- =========================
-CREATE TABLE chunks (
+CREATE TABLE IF NOT EXISTS chunks (
     id SERIAL PRIMARY KEY,
     document_id INTEGER REFERENCES documents(id) ON DELETE CASCADE,
     chunk_index INTEGER,
@@ -30,7 +31,7 @@ CREATE TABLE chunks (
 -- =========================
 -- TABLE QA HISTORY
 -- =========================
-CREATE TABLE qa_history (
+CREATE TABLE IF NOT EXISTS qa_history (
     id SERIAL PRIMARY KEY,
     session_id TEXT,
     question TEXT,

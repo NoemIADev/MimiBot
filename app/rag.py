@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from openai import AzureOpenAI
+from openai import OpenAI
 import re
 
 from embeddings import get_embedding
@@ -11,11 +11,10 @@ from db import get_db_connection
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(BASE_DIR / ".env")
 
-# client Azure OpenAI
-client = AzureOpenAI(
-    api_key=os.getenv("AZURE_OPENAI_API_KEY"),
-    azure_endpoint=os.getenv("AZURE_OPENAI_ENDPOINT"),
-    api_version="2024-02-01"
+# client OpenRouter
+client = OpenAI(
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    base_url=os.getenv("OPENROUTER_BASE_URL"),
 )
 
 def rewrite_query(question, history):
@@ -211,7 +210,7 @@ Question actuelle :
 
 def ask_gpt(system_prompt, user_prompt):
     response = client.chat.completions.create(
-        model=os.getenv("AZURE_OPENAI_CHAT_DEPLOYMENT"),
+        model=os.getenv("OPENROUTER_LLM_MODEL"),
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},

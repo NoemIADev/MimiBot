@@ -1,0 +1,146 @@
+name: Build and deploy backend to AWS App Runner
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app/**"
+      - ".github/workflows/aws-backend.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: aws-backend-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      AWS_REGION: ${{ vars.AWS_REGION }}
+      AWS_ROLE_ARN: ${{ vars.AWS_ROLE_ARN }}
+      ECR_REPOSITORY: ${{ vars.ECR_REPOSITORY }}
+      APP_RUNNER_SERVICE_ARN: ${{ vars.APP_RUNNER_SERVICE_ARN }}
+      AWS_PAGER: ""
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate deployment settings
+        shell: bash
+        run: |
+          set -euo pipefail
+          for name in AWS_REGION AWS_ROLE_ARN ECR_REPOSITORY APP_RUNNER_SERVICE_ARN; do
+            if [[ -z "${!name}" ]]; then
+              echo "::error::Missing GitHub Actions repository variable: $name"
+              exit 1
+            fi
+          done
+
+      - name: Build backend image
+        run: docker build --tag mimi-backend:test ./app
+
+      - name: Check container startup without external services
+        shell: bash
+        run: |
+          set -euo pipefail
+          docker run -d --name mimi-smoke --network none \
+            -e OPENROUTER_API_KEY=build-test-placeholder \
+            -e OPENROUTER_BASE_URL=https://openrouter.ai/api/v1 \
+            mimi-backend:test
+          trap 'docker logs mimi-smoke; docker rm -f mimi-smoke' EXIT
+          for attempt in {1..30}; do
+            if docker exec mimi-smoke python -c \
+              'import json, urllib.request; r = urllib.request.urlopen("http://127.0.0.1:8000/", timeout=2); assert json.load(r)["message"] == "API Mimi OK"'; then
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "::error::Backend container did not become healthy"
+          exit 1
+
+      - name: Authenticate to AWS using GitHub OIDC
+        uses: aws-actions/configure-aws-credentials@v5
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: mimi-${{ github.run_id }}
+
+      - name: Log in to Amazon ECR
+        id: ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Push versioned backend image
+        id: image
+        env:
+          ECR_REGISTRY: ${{ steps.ecr.outputs.registry }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          image="$ECR_REGISTRY/$ECR_REPOSITORY:$GITHUB_SHA-$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"
+          docker tag mimi-backend:test "$image"
+          docker push "$image"
+          echo "uri=$image" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy image and preserve App Runner runtime settings
+        id: deploy
+        env:
+          IMAGE_URI: ${{ steps.image.outputs.uri }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          umask 077
+          service_file="$RUNNER_TEMP/mimi-service.json"
+          source_file="$RUNNER_TEMP/mimi-source.json"
+          trap 'rm -f "$service_file" "$source_file"' EXIT
+          aws apprunner describe-service --service-arn "$APP_RUNNER_SERVICE_ARN" > "$service_file"
+          jq -e '.Service.Status == "RUNNING" and .Service.SourceConfiguration.ImageRepository.ImageRepositoryType == "ECR"' "$service_file" > /dev/null
+          # Retain environment variables, secret references and ECR access role.
+          jq --arg image "$IMAGE_URI" '
+            .Service.SourceConfiguration
+            | .ImageRepository.ImageIdentifier = $image
+            | .ImageRepository.ImageConfiguration.Port = "8000"
+            | .AutoDeploymentsEnabled = false
+          ' "$service_file" > "$source_file"
+          operation=$(aws apprunner update-service \
+            --service-arn "$APP_RUNNER_SERVICE_ARN" \
+            --source-configuration "file://$source_file" \
+            --query OperationId --output text)
+          echo "operation=$operation" >> "$GITHUB_OUTPUT"
+
+      - name: Wait for this deployment and check HTTP health
+        env:
+          OPERATION_ID: ${{ steps.deploy.outputs.operation }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          for attempt in {1..80}; do
+            status=$(aws apprunner list-operations --service-arn "$APP_RUNNER_SERVICE_ARN" \
+              --query "OperationSummaryList[?Id=='$OPERATION_ID'].Status | [0]" --output text)
+            echo "Deployment status: $status"
+            case "$status" in
+              SUCCEEDED)
+                url=$(aws apprunner describe-service --service-arn "$APP_RUNNER_SERVICE_ARN" \
+                  --query Service.ServiceUrl --output text)
+                curl --fail --silent --show-error --retry 5 --retry-delay 5 \
+                  --connect-timeout 10 --max-time 30 "https://$url/" \
+                  | python -c 'import json, sys; assert json.load(sys.stdin)["message"] == "API Mimi OK"'
+                echo "Backend deployed: https://$url" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+                ;;
+              FAILED|ROLLBACK_IN_PROGRESS|ROLLBACK_FAILED|ROLLBACK_SUCCEEDED)
+                echo "::error::App Runner deployment failed: $status"
+                exit 1
+                ;;
+            esac
+            sleep 15
+          done
+          echo "::error::Timed out waiting for App Runner deployment"
+          exit 1
