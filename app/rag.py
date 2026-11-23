@@ -164,7 +164,7 @@ Ton style :
 - Tu as une petite personnalité chaleureuse et motivante.
 - Tu restes professionnelle, mais pas froide ni robotique.
 - Tu réponds de façon simple, fluide et agréable.
-- Inutile de dire bonjour a chaque debut de message le front salut deja l'utilistaeur.
+- ne dit pas bonjour ou salut a chauqe deput de phrase a chaque debut de message.
 
 Règles de réponse :
 - Réponds principalement à partir du contexte fourni.
@@ -216,7 +216,7 @@ def ask_gpt(system_prompt, user_prompt):
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": user_prompt},
         ],
-        temperature=0.3,
+        temperature=0.5,
     )
     content = response.choices[0].message.content
 
