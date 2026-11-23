@@ -1,14 +1,153 @@
 @tailwind base;
-@tailwind components;
-@tailwind utilities;
+
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/dm-sans-regular.ttf') format('truetype'); }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 500; font-display: swap; src: url('/fonts/dm-sans-medium.ttf') format('truetype'); }
+@font-face { font-family: 'DM Sans'; font-style: normal; font-weight: 700; font-display: swap; src: url('/fonts/dm-sans-bold.ttf') format('truetype'); }
+@font-face { font-family: 'Lora'; font-style: normal; font-weight: 400; font-display: swap; src: url('/fonts/lora-regular.ttf') format('truetype'); }
 
 :root {
-  font-family: 'Inter', 'Avenir Next', 'Segoe UI', system-ui, -apple-system, sans-serif;
-  color: #0f274d;
+  font-family: 'DM Sans', 'Segoe UI', sans-serif;
+  color: #edf0f7;
+  background: #101b30;
+  --sidebar: #233c5b;
+  --muted: #b8cadf;
+  --line: #3c526f;
+  --bubble: #91b9d4;
+  --accent: #a59ad8;
 }
-
-body {
-  margin: 0;
-  min-height: 100vh;
-  background: linear-gradient(160deg, #e5eef9 0%, #f1f6fc 45%, #e8f0fb 100%);
+* { box-sizing: border-box; }
+body { margin: 0; min-width: 320px; }
+button, textarea { font: inherit; }
+button, a { -webkit-tap-highlight-color: transparent; }
+button { cursor: pointer; }
+button:disabled { cursor: not-allowed; }
+button:focus-visible, a:focus-visible, textarea:focus-visible { outline: 3px solid #d1c4ff; outline-offset: 4px; }
+button, a { transition: background-color 150ms, color 150ms; }
+.app-shell { display: grid; grid-template-columns: 35% minmax(0, 1fr); min-height: 100dvh; max-width: 1800px; margin: auto; }
+.mobile-header, .mobile-nav, .mobile-copy { display: none; }
+.portfolio { background: var(--sidebar); padding: 40px 44px 36px; }
+.eyebrow { color: #b7c9dc; font-size: 14px; line-height: 1.5; letter-spacing: 1.5px; font-weight: 700; text-transform: uppercase; }
+.portfolio h1 { font: 400 58px/1.16 'Lora', Georgia, serif; margin: 24px 0 12px; }
+.profession { font-size: 23px; line-height: 1.45; font-weight: 500; color: #dfe6f1; }
+.location { color: var(--muted); margin-top: 12px; font-size: 16px; }
+.skills-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--line); }
+.skills { list-style: none; padding: 0; display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+.skills li { background: #2e4868; border-radius: 8px; padding: 5px 11px; font-size: 15px; color: #e0eaf4; }
+.education { margin-top: 46px; }
+.education > p { font-size: 17px; margin-top: 14px; }
+.education > .muted { margin-top: 3px; font-size: 15px; line-height: 1.5; }
+.muted { color: var(--muted); }
+.explore { margin-top: 24px; padding-top: 18px; border-top: 1px solid var(--line); }
+.explore h2 { font: 400 25px/1.4 'Lora', Georgia, serif; margin-bottom: 20px; }
+.explore ol { list-style: none; padding: 0; }
+.explore button { width: 100%; display: flex; gap: 15px; text-align: left; background: transparent; border: 0; border-radius: 5px; }
+.explore button:hover { background: #2e4868; }
+.project-number { width: 24px; flex-shrink: 0; padding-top: 8px; font-size: 14px; color: #a9b9d1; }
+.project-copy { display: flex; flex: 1; min-width: 0; flex-direction: column; gap: 2px; padding: 5px 0 10px; border-bottom: 1px solid var(--line); }
+.explore li:last-child .project-copy { border-bottom: 0; }
+.project-title { font-size: 18px; color: #f0edf8; }
+.project-copy .muted { font-size: 15px; line-height: 1.5; }
+.social-links { display: flex; flex-wrap: wrap; gap: 52px; margin: 22px 0 28px; font-size: 17px; }
+.social-links a { text-decoration: underline; text-underline-offset: 4px; }
+.social-links a:hover { color: white; }
+.privacy { margin: 0 -12px; background: #1c334f; border-radius: 12px; padding: 16px; font-size: 15px; line-height: 1.5; }
+.privacy h2 { color: #d7d3ee; font-weight: 700; margin-bottom: 10px; }
+.privacy p { color: #becdde; }
+.conversation { display: flex; flex-direction: column; position: sticky; top: 0; height: 100dvh; min-height: 620px; }
+.chat-header { display: flex; align-items: center; gap: 17px; margin: 0 44px; padding: 23px 0; border-bottom: 1px solid #293a52; }
+.avatar { display: block; width: 43px; height: 43px; flex-shrink: 0; object-fit: cover; border-radius: 50%; }
+.chat-header > .avatar { width: 62px; height: 62px; }
+.chat-identity { min-width: 0; }
+.chat-identity h2 { font-size: 25px; line-height: 1.2; font-weight: 700; }
+.chat-identity p { margin-top: 8px; font-size: 16px; color: #a9bcd3; }
+.availability { margin-left: auto; display: flex; align-items: center; gap: 10px; border-radius: 24px; padding: 7px 15px; font-size: 15px; white-space: nowrap; }
+.availability > span { width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.available { background: #1c2f3b; color: #b9e0cd; }
+.unavailable { background: #402c38; color: #ffc0c0; }
+.checking { background: #293344; color: #c5cbd4; }
+.thread { flex: 1; min-height: 0; overflow-y: auto; padding: 26px 44px 30px; scrollbar-color: #536e94 #101b30; }
+.conversation-marker { margin: 0 0 24px 56px; color: #a9bcd3; font-size: 14px; letter-spacing: 1.15px; line-height: 1.5; text-transform: uppercase; }
+.message { display: flex; gap: 14px; margin-bottom: 24px; padding-right: 64px; }
+.message > .avatar { margin-top: 25px; }
+.message-content { min-width: 0; flex: 1; }
+.message-author { font-size: 14px; color: #bbcde0; margin: 0 4px 6px; }
+.message-bubble { background: var(--bubble); color: #182d47; border-radius: 5px 18px 18px; padding: 19px 24px 22px; font-size: 18px; line-height: 1.5; overflow-wrap: anywhere; }
+.message-bubble h3 { font: 400 30px/1.2 'Lora', Georgia, serif; color: #101b30; margin-bottom: 16px; }
+.message-bubble p { white-space: pre-wrap; }
+.message-bubble a { text-decoration: underline; text-underline-offset: 3px; }
+.message.user { justify-content: flex-end; padding-left: 100px; }
+.user .message-content { flex: 0 1 auto; max-width: 100%; }
+.user .message-author { text-align: right; color: #c8b9e7; }
+.user .message-bubble { background: var(--accent); color: #101b30; border-radius: 18px 5px 18px 18px; font-size: 17px; padding: 16px 22px; }
+.suggestions { margin: -4px 0 28px 57px; }
+.suggestions > p { color: #b6c6db; font-size: 15px; margin-bottom: 12px; }
+.suggestions > div { display: flex; flex-wrap: wrap; gap: 10px; }
+.suggestions button { border: 1px solid #536e94; border-radius: 25px; padding: 10px 16px; font-size: 16px; line-height: 1.4; color: #cfdded; }
+.suggestions button:hover { background: #233c5b; }
+.typing { display: flex; align-items: center; gap: 14px; color: #bbcde0; font-size: 16px; }
+.composer { flex-shrink: 0; margin: 0 44px; border-top: 1px solid #293a52; padding: 28px 0 24px; }
+.message-form { display: flex; gap: 12px; align-items: center; padding: 9px 11px 9px 21px; background: #1c2f49; border: 1px solid #536e94; border-radius: 17px; }
+.message-form textarea { min-width: 0; width: 100%; height: 24px; resize: none; max-height: 150px; background: transparent; border: none; color: #edf0f7; font-size: 17px; line-height: 24px; padding: 0; }
+.message-form:focus-within { outline: 2px solid #d1c4ff; outline-offset: 2px; }
+.message-form textarea:focus-visible { outline: none; }
+.message-form textarea::placeholder { color: #b9c9dc; }
+.message-form button { width: 48px; height: 48px; flex-shrink: 0; border-radius: 13px; background: var(--accent); color: #101b30; font-size: 30px; }
+.message-form button:hover:enabled { background: #c2b4f2; }
+.message-form button:disabled { background: #64708a; color: #dce3f1; }
+.keyboard-help, .composer-note { color: #a9bcd3; font-size: 14px; line-height: 1.5; margin: 12px 3px 0; }
+.connection-notice { font-size: 15px; color: #ffc0c0; margin-bottom: 12px; }
+@media (min-width: 1800px) { .app-shell { border-inline: 1px solid #293a52; } }
+@media (min-width: 901px) and (max-width: 1200px) {
+  .portfolio { padding-inline: 26px; }
+  .chat-header { margin-inline: 26px; gap: 12px; flex-wrap: wrap; }
+  .chat-header > .avatar { width: 50px; height: 50px; }
+  .availability { padding-inline: 10px; }
+  .thread { padding-inline: 26px; }
+  .message { padding-right: 0; }
+  .composer { margin-inline: 26px; }
 }
+@media (max-width: 900px) {
+  .app-shell { display: flex; flex-direction: column; min-height: 100dvh; }
+  .mobile-header, .mobile-nav, .mobile-copy { display: block; }
+  span.mobile-copy { display: inline; }
+  .desktop-header, .desktop-copy, .keyboard-help { display: none; }
+  .mobile-header .chat-header { margin: 0 20px; border: 0; padding: 20px 0 16px; gap: 10px; flex-wrap: wrap; }
+  .chat-header > .avatar { width: 48px; height: 48px; }
+  .chat-identity h2 { font-size: 22px; }
+  .chat-identity p { font-size: 14px; margin-top: 5px; }
+  .availability { font-size: 14px; gap: 7px; padding: 6px 10px; }
+  .mobile-nav { display: flex; margin: 0 20px 16px; background: #1c2f49; border-radius: 10px; padding: 4px; gap: 4px; }
+  .mobile-nav button { flex: 1; min-height: 40px; border-radius: 7px; color: #b5c7dd; font-size: 15px; }
+  .mobile-nav button[aria-pressed='true'] { background: #324968; color: #edf0f7; font-weight: 700; }
+  .view-conversation { height: 100dvh; min-height: 540px; }
+  .view-conversation .portfolio, .view-portfolio .conversation { display: none; }
+  .view-portfolio { background: var(--sidebar); }
+  .portfolio-heading { font: 400 25px/1.4 'Lora', Georgia, serif; padding: 24px; }
+  .portfolio { padding: 14px 24px 36px; }
+  .portfolio h1 { font-size: 48px; }
+  .profession { font-size: 22px; }
+  .education { margin-top: 30px; }
+  .project-copy { padding-block: 8px 12px; }
+  .social-links { margin-block: 30px; }
+  .privacy { margin-inline: -8px; }
+  .conversation { position: static; height: auto; min-height: 0; flex: 1; overflow: hidden; }
+  .thread { padding: 0 20px 24px; }
+  .conversation-marker { font-size: 13px; margin: 0 0 16px 44px; }
+  .message { gap: 12px; padding-right: 0; margin-bottom: 20px; }
+  .message > .avatar { width: 32px; height: 32px; margin-top: 24px; }
+  .message-author { font-size: 14px; margin-left: 2px; }
+  .message-bubble { padding: 16px 17px 20px; font-size: 17px; line-height: 1.5; border-radius: 4px 15px 15px; }
+  .message-bubble h3 { font-size: 25px; margin-bottom: 14px; }
+  .message.user { padding-left: 44px; }
+  .user .message-bubble { font-size: 16px; }
+  .suggestions { margin-left: 44px; }
+  .suggestions > p { display: none; }
+  .suggestions > div { gap: 8px; }
+  .suggestions button { padding: 9px 11px; font-size: 14px; }
+  .composer { margin: 0 20px; padding: 15px 0 max(16px, env(safe-area-inset-bottom)); }
+  .message-form { padding: 7px 9px 7px 15px; border-radius: 15px; }
+  .message-form textarea { font-size: 16px; height: 24px; line-height: 24px; }
+  .message-form button { width: 43px; height: 43px; border-radius: 12px; }
+  .composer-note { font-size: 13px; text-align: center; }
+}
+@media (prefers-reduced-motion: reduce) { button, a { transition: none; } }

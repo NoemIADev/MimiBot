@@ -253,3 +253,34 @@ Vite r?ussi ; POST /ask_mimi HTTP 200 et historique relu depuis Neon.
 La session `neon-smoke-test-2026-11-22` est conserv?e dans qa_history.
 Documents et chunks ?taient vides : la pertinence documentaire du RAG ne peut
 pas ?tre valid?e avant une ingestion d?cid?e s?par?ment.
+
+## Disponibilité de Mimi et nouveau frontend
+
+Le frontend suit la maquette Figma (bureau et navigation mobile) et utilise
+`/mimi-avatar.png`. Les polices DM Sans et Lora sont hébergées localement dans
+`Frontend/public/fonts`, avec leurs licences.
+
+`VITE_API_URL` reste l’URL complète du endpoint de conversation, par exemple
+`https://api.example.com/ask_mimi`. Le frontend en déduit
+`https://api.example.com/health` et le vérifie au chargement puis toutes les
+60 secondes. La vérification est abandonnée après 20 secondes : gris pendant
+la requête, vert si l’API et PostgreSQL répondent, rouge sinon. Une erreur HTTP,
+réseau ou une réponse inattendue est considérée comme une indisponibilité.
+Le texte saisi est conservé pendant une panne ; l’envoi est désactivé tant que
+la disponibilité n’est pas confirmée. Les suggestions préremplissent la saisie.
+
+`GET /health` exécute uniquement `SELECT 1` sur PostgreSQL, avec le délai de
+connexion existant de 15 secondes et un délai de requête de 3 secondes.
+Il renvoie HTTP 200 avec `status`, `api` et `database` à `ok`, ou HTTP 503
+sans détail sensible si la base ne répond pas. Aucun appel au LLM, aux
+embeddings, ni aucune écriture de données n’est effectué. Le statut confirme
+l’accès à l’API et à la base, pas la disponibilité du fournisseur de LLM.
+
+Déployer le backend avec `/health`, puis reconstruire et déployer le frontend
+avec `VITE_API_URL`. L’origine du frontend doit être présente dans
+`ALLOWED_ORIGINS`. Le workflow Lightsail ne déploie que le backend ; le
+frontend doit également être publié par son hébergeur.
+
+Validation locale : `npm --prefix Frontend run build` et
+`python -m unittest discover -s app/tests -v` (dans l’environnement Python du
+backend). Les tests de santé utilisent une base simulée, sans services externes.

@@ -1,283 +1,220 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import useAvailability from './useAvailability';
 
 const API_URL = import.meta.env.VITE_API_URL;
-console.log("API_URL =", API_URL);
-
-const introCards = [
-  {
-    title: 'Parcours',
-    description:
-      'Reconversion vers le développement en intelligence artificielle, avec une approche polyvalente combinant data, algorithmie et création d’applications orientées utilisateur.'
-  },
-  {
-    title: 'Compétences',
-    description:
-      'Python, LLM apps, structuration RAG, prompt engineering et bien d’autres, demandez moi !'
-  },
-  {
-    title: 'Projets',
-    description:
-      'Projet personnel (Onirique, en conception) et projets réalisés en formation autour de l’IA, combinant machine learning, développement d’algorithmes et création d’applications et agents conversationnels.'
-  }
+const projects = [
+  ['Mimi Bot', 'Mon assistant RAG', 'Comment fonctionne Mimi Bot ?'],
+  ['Stage OCR', 'Extraction documentaire · AWS Bedrock', 'Peux-tu me parler du stage OCR de Noémie ?'],
+  ['Onirique', 'Un jeu narratif porté par l’IA', 'Peux-tu me présenter le projet Onirique ?'],
+  ['Mes passions', 'IA, jeux vidéo & création narrative', 'Qu’est-ce qui anime Noémie ?'],
 ];
+const suggestions = [
+  ['Découvrir ses projets', 'Quels sont les projets de Noémie ?', 'Ses projets ↗'],
+  ['Son parcours en IA', 'Quel est le parcours de Noémie en intelligence artificielle ?', 'Son parcours en IA ↗'],
+  ['Pourquoi Mimi ?', 'Pourquoi Noémie a-t-elle créé Mimi ?'],
+];
+const statusLabels = { checking: 'Vérification…', available: 'Disponible', unavailable: 'Indisponible' };
 
-
-
-function BrowserFrame({ children }) {
-  return (
-      
-      <div className="p-8 lg:p-10">{children}</div>
-    
-  );
+function Avatar({ className = '' }) {
+  return <img src="/mimi-avatar.png" alt="Mimi" className={`avatar ${className}`} />;
 }
 
-function InfoCard({ title, description }) {
+function ChatHeader({ availability }) {
   return (
-    <article className="rounded-2xl border border-slate-200/70 bg-white/75 p-5 shadow-panel transition hover:-translate-y-0.5 hover:shadow-md">
-      <h3 className="text-lg font-semibold text-navy">{title}</h3>
-      <p className="mt-2 text-sm leading-relaxed text-slateblue">{description}</p>
-    </article>
-  );
-}
-
-function LeftIntroPanel() {
-  return (
-    <section className="rounded-[30px] border border-slate-200/80 bg-paper px-8 py-10 lg:px-12">
-      <p className="text-6xl font-semibold tracking-tight text-navy">Mimi</p>
-      <h2 className="mt-2 text-3xl font-medium text-slateblue">L’assistante de Noémie</h2>
-
-      <div className="my-8 border-t border-slate-300/70" />
-
-      <p className="max-w-2xl text-lg leading-relaxed text-slateblue">
-        “Bonjour, je suis Mimi, l’assistante de Noémie. Je suis là pour vous aider à découvrir son parcours, ses compétences et ses projets. Vous pouvez me poser toutes les questions que vous voulez sur elle, et je ferai de mon mieux pour vous répondre.”
+    <header className="chat-header">
+      <Avatar />
+      <div className="chat-identity"><h2>MimiBot</h2><p>L’assistante de Noémie</p></div>
+      <p className={`availability ${availability}`} role="status" aria-live="polite">
+        <span aria-hidden="true" />{statusLabels[availability]}
       </p>
+    </header>
+  );
+}
 
-      <div className="mt-8 grid gap-4">
-        {introCards.map((card) => (
-          <InfoCard key={card.title} {...card} />
-        ))}
-      </div>
-    </section>
+function Portfolio({ onExplore }) {
+  return (
+    <aside id="portfolio" className="portfolio" aria-label="Le portfolio de Noémie">
+      <p className="eyebrow"><span className="desktop-copy">Le portfolio de Noémie</span><span className="mobile-copy">Derrière Mimi, il y a…</span></p>
+      <h1>Noémie</h1>
+      <p className="profession">Développeuse en<br />intelligence artificielle</p>
+      <p className="location">Toulouse, France</p>
+      <section className="skills-section">
+        <h2 className="eyebrow">Mes terrains de jeu</h2>
+        <ul className="skills">{['Python', 'NLP', 'LLM', 'RAG', 'IA générative'].map(skill => <li key={skill}>{skill}</li>)}</ul>
+      </section>
+      <section className="education">
+        <h2 className="eyebrow">En apprentissage, toujours</h2>
+        <p>Simplon · Intelligence artificielle</p>
+        <p className="muted">Et ensuite ? Une poursuite envisagée au CNAM.</p>
+      </section>
+      <section className="explore">
+        <h2>Explorer avec Mimi</h2>
+        <ol>{projects.map(([title, description, question], index) => (
+          <li key={title}><button type="button" onClick={() => onExplore(question)}>
+            <span className="project-number">0{index + 1}</span>
+            <span className="project-copy"><span className="project-title">{title}</span><span className="muted">{description}</span></span>
+          </button></li>
+        ))}</ol>
+      </section>
+      <nav className="social-links" aria-label="Retrouver Noémie">
+        <a href="https://github.com/NoemIADev" target="_blank" rel="noopener noreferrer">GitHub ↗</a>
+        <a href="https://www.linkedin.com/in/noemie-majerus-devia" target="_blank" rel="noopener noreferrer">LinkedIn ↗</a>
+      </nav>
+      <section className="privacy">
+        <h2>Un petit mot avant de discuter</h2>
+        <p>Mimi est un projet personnel d’apprentissage, non professionnel. Ne communiquez aucune information personnelle ou confidentielle. Les questions sont enregistrées en base, sans identification nominative, uniquement pour améliorer le projet.</p>
+      </section>
+    </aside>
   );
 }
 
 function renderTextWithLinks(text) {
-  const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/g;
-  const parts = text.split(urlRegex);
-
-  return parts.map((part, index) => {
-    const isUrl = urlRegex.test(part);
-
-    if (!isUrl) {
-      return <React.Fragment key={index}>{part}</React.Fragment>;
-    }
-
-    const href = part.startsWith("http") ? part : `https://${part}`;
-
-    return (
-      <a
-        key={index}
-        href={href}
-        target="_blank"
-        rel="noopener noreferrer"
-        className="underline"
-      >
-        {part}
-      </a>
-    );
-  });
+  return text.split(/(https?:\/\/[^\s]+|www\.[^\s]+)/g).map((part, index) => (
+    /^(https?:\/\/|www\.)/.test(part)
+      ? <a key={index} href={part.startsWith('http') ? part : `https://${part}`} target="_blank" rel="noopener noreferrer">{part}</a>
+      : <React.Fragment key={index}>{part}</React.Fragment>
+  ));
 }
 
-function ChatMessage({ role, text, avatar }) {
-  const isBot = role === 'bot';
-
+function ChatMessage({ role, text, welcome = false }) {
   return (
-    <div className={`flex ${isBot ? 'justify-start' : 'justify-end'}`}>
-      <div className={`flex max-w-[88%] items-end gap-3 ${isBot ? '' : 'flex-row-reverse'}`}>
-        {isBot && (
-          <img
-            src={avatar}
-            alt="Avatar de Mimi"
-            className="h-24 w-24 shrink-0 rounded-full border border-slate-300/70 bg-slate-100 object-cover"
-          />
-        )}
-        <div
-          className={`rounded-2xl px-5 py-3 text-[15px] leading-relaxed shadow-sm ${
-            isBot
-              ? 'rounded-bl-md border border-blue-200/80 bg-bubble text-navy'
-              : 'rounded-br-md bg-navy text-blue-50'
-          }`}
-        >
-          {renderTextWithLinks(text)}
+    <article className={`message ${role}`}>
+      {role === 'bot' && <Avatar />}
+      <div className="message-content">
+        <p className="message-author">{role === 'bot' ? 'Mimi' : 'Toi'}</p>
+        <div className="message-bubble">
+          {welcome && <h3>Moi, c’est Mimi.</h3>}
+          {welcome ? <>
+            <p className="desktop-copy">{text}</p>
+            <p className="mobile-copy">Le petit lien entre toi et l’univers de Noémie. Ses projets, son parcours, ses passions… Par quoi commence-t-on ?</p>
+          </> : <p>{renderTextWithLinks(text)}</p>}
         </div>
       </div>
-    </div>
-  );
-}
-
-function ChatInput({ onSend }) {
-  const [input, setInput] = React.useState("");
-
-  const handleSend = () => {
-    if (!input.trim()) return;
-    onSend(input);
-    setInput("");
-  };
-
-  return (
-    <form
-      className="mt-5 flex items-center gap-3 border-t border-slate-200 pt-4"
-      onSubmit={(e) => {
-        e.preventDefault();
-        handleSend();
-      }}
-    >
-      <input
-        type="text"
-        placeholder="Écrivez votre message..."
-        value={input}
-        onChange={(e) => setInput(e.target.value)}
-        className="h-12 flex-1 rounded-xl border border-slate-300 bg-white px-4"
-      />
-
-      <button type="submit" className="h-12 rounded-xl bg-navy px-5 text-white">
-        Envoyer
-      </button>
-    </form>
-  );
-}
-
-function ChatPanel({ chatMessages, isTyping, onSend }) {
-
-  return (
-    <section className="rounded-[30px] border border-blue-200/80 bg-paper p-6 shadow-panel lg:p-7">
-      <header className="flex items-center justify-between border-b border-blue-100 pb-4">
-        <div>
-          <h3 className="text-2xl font-semibold text-navy">MimiBot</h3>
-          <p className="mt-1 flex items-center gap-2 text-sm text-slateblue">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500" />
-            En ligne
-          </p>
-        </div>
-      </header>
-
-      <div className="mt-5 h-[460px] space-y-4 overflow-y-auto pr-1">
-        {chatMessages.map((message) => (
-          <ChatMessage key={message.id} {...message} />
-        ))}
-        {isTyping && (
-  <div className="flex gap-3 items-center">
-    <img
-      src="/mimi-avatar.png"
-      className="h-14 w-14 rounded-full object-cover"
-    />
-    <div className="bg-slate-200 px-4 py-2 rounded-2xl flex gap-1">
-      <span className="animate-bounce">.</span>
-      <span className="animate-bounce delay-100">.</span>
-      <span className="animate-bounce delay-200">.</span>
-    </div>
-  </div>
-)}
-      </div>
-
-      <ChatInput onSend={onSend} />
-    </section>
+    </article>
   );
 }
 
 export default function App() {
+  const availability = useAvailability(API_URL);
+  const [view, setView] = useState('conversation');
+  const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
-
-  const [sessionId, setSessionId] = useState("");
-
-  const [chatMessages, setChatMessages] = useState([
-    {
-      id: 1,
-      role: 'bot',
-      avatar: '/mimi-avatar.png',
-      text: 'Bonjour, je suis Mimi. Vous pouvez me demander qui est Noémie, sur quels projets elle travaille, ou quelles technologies elle utilise.'
-    }
-  ]);
+  const [sessionId, setSessionId] = useState('');
+  const [chatMessages, setChatMessages] = useState([]);
+  const sending = useRef(false);
+  const request = useRef(null);
+  const thread = useRef(null);
+  const inputRef = useRef(null);
+  const canSend = availability === 'available' && !isTyping && Boolean(sessionId);
 
   useEffect(() => {
-  let storedSessionId = localStorage.getItem("mimi_session_id");
+    let id;
+    try {
+      id = localStorage.getItem('mimi_session_id') || crypto.randomUUID();
+      localStorage.setItem('mimi_session_id', id);
+    } catch {
+      id = crypto.randomUUID();
+    }
+    setSessionId(id);
+    return () => request.current?.abort();
+  }, []);
 
-  if (!storedSessionId) {
-    storedSessionId = crypto.randomUUID();
-    localStorage.setItem("mimi_session_id", storedSessionId);
+  useEffect(() => {
+    if (thread.current && (chatMessages.length || isTyping)) {
+      thread.current.scrollTop = thread.current.scrollHeight;
+    }
+  }, [chatMessages, isTyping, view]);
+
+  useEffect(() => {
+    if (inputRef.current) {
+      inputRef.current.style.height = 'auto';
+      inputRef.current.style.height = `${Math.min(inputRef.current.scrollHeight, 150)}px`;
+    }
+  }, [input, view]);
+
+  async function handleSend(event) {
+    event.preventDefault();
+    const message = input.trim();
+    if (!message || !canSend || sending.current) return;
+    sending.current = true;
+    setInput('');
+    setChatMessages(previous => [...previous, { id: crypto.randomUUID(), role: 'user', text: message }]);
+    setIsTyping(true);
+    request.current = new AbortController();
+    const timeout = window.setTimeout(() => request.current?.abort(), 120000);
+    try {
+      const response = await fetch(API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: message, session_id: sessionId }),
+        signal: request.current.signal,
+      });
+      if (!response.ok) throw new Error('Request failed');
+      const data = await response.json();
+      if (typeof data.response !== 'string' || !data.response.trim()) throw new Error('Empty response');
+      setChatMessages(previous => [...previous, { id: crypto.randomUUID(), role: 'bot', text: data.response }]);
+    } catch {
+      setChatMessages(previous => [...previous, {
+        id: crypto.randomUUID(), role: 'bot',
+        text: 'Désolée, je n’ai pas pu répondre pour le moment. Tu peux réessayer dans un instant.',
+      }]);
+      setInput(previous => previous || message);
+    } finally {
+      window.clearTimeout(timeout);
+      sending.current = false;
+      setIsTyping(false);
+    }
   }
 
-  setSessionId(storedSessionId);
-}, []);
-
-  const handleSend = async (message) => {
-    if (!sessionId) return;
-    const userMessage = {
-      id: Date.now(),
-      role: 'user',
-      text: message
-    };
-
-    setChatMessages((prev) => [...prev, userMessage]);
-    setIsTyping(true);
-
-    try {
-  const res = await fetch(API_URL, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      question: message,
-      session_id: sessionId,
-    }),
-  });
-
-  const data = await res.json();
-
-  const botMessage = {
-    id: Date.now() + 1,
-    role: 'bot',
-    avatar: '/mimi-avatar.png',
-    text: data.response
-  };
-
-  setChatMessages((prev) => [...prev, botMessage]);
-} catch (err) {
-  console.error(err);
-
-  const errorMessage = {
-    id: Date.now() + 1,
-    role: 'bot',
-    avatar: '/mimi-avatar.png',
-    text: "Désolée, j'ai eu un souci pour répondre."
-  };
-
-  setChatMessages((prev) => [...prev, errorMessage]);
-} finally {
-  setIsTyping(false);
-}
-  };
+  function explore(question) {
+    setView('conversation');
+    setInput(question);
+    window.requestAnimationFrame(() => inputRef.current?.focus());
+  }
 
   return (
-    <main className="min-h-screen px-6 py-8 lg:px-10 lg:py-12">
-      <BrowserFrame>
-        <div className="relative grid gap-0 lg:grid-cols-2">
-          <div className="pb-8 pr-0 lg:pb-0 lg:pr-8">
-            <LeftIntroPanel />
+    <main className={`app-shell view-${view}`}>
+      <div className="mobile-header">
+        {view === 'conversation' ? <ChatHeader availability={availability} /> : <p className="portfolio-heading">Le portfolio</p>}
+      </div>
+      <nav className="mobile-nav" aria-label="Navigation principale">
+        <button type="button" aria-pressed={view === 'conversation'} aria-controls="conversation" onClick={() => setView('conversation')}>Conversation</button>
+        <button type="button" aria-pressed={view === 'portfolio'} aria-controls="portfolio" onClick={() => setView('portfolio')}>Le portfolio</button>
+      </nav>
+      <Portfolio onExplore={explore} />
+      <section id="conversation" className="conversation" aria-label="Conversation avec Mimi">
+        <div className="desktop-header"><ChatHeader availability={availability} /></div>
+        <div className="thread" ref={thread}>
+          <p className="conversation-marker">Aujourd’hui<span className="desktop-copy"> · Une rencontre, quelques questions</span></p>
+          <ChatMessage role="bot" welcome text={'Le petit lien entre toi et l’univers de Noémie.\nJe te raconte ses projets, son parcours et ce qui l’anime.\nPar quoi as-tu envie de commencer ?'} />
+          <div className="suggestions">
+            <p>Un peu d’inspiration ?</p>
+            <div>{suggestions.map(([label, question, mobileLabel]) => <button type="button" key={label} className={mobileLabel ? '' : 'desktop-copy'} onClick={() => explore(question)}>
+              <span className="desktop-copy">{label}</span>{mobileLabel && <span className="mobile-copy">{mobileLabel}</span>}
+            </button>)}</div>
           </div>
-
-          <div className="lg:pl-8">
-            <ChatPanel
-              chatMessages={chatMessages}
-              isTyping={isTyping}
-              onSend={handleSend}
-            />
+          <div className="messages" role="log" aria-label="Messages" aria-live="polite" aria-relevant="additions">
+            {chatMessages.map(message => <ChatMessage key={message.id} {...message} />)}
           </div>
-
-          <div className="pointer-events-none absolute left-1/2 top-0 hidden h-full w-px -translate-x-1/2 bg-gradient-to-b from-transparent via-slate-300 to-transparent lg:block" />
+          {isTyping && <div className="typing" role="status"><Avatar /><p>Mimi réfléchit<span aria-hidden="true">…</span></p></div>}
         </div>
-      </BrowserFrame>
+        <footer className="composer">
+          {availability === 'unavailable' && <p className="connection-notice" role="status">Mimi est momentanément indisponible. Tu peux toujours explorer le portfolio.</p>}
+          <form onSubmit={handleSend} className="message-form">
+            <textarea ref={inputRef} aria-label="Ton message à Mimi" rows={1} value={input}
+              placeholder="Une question pour Mimi ?" onChange={event => setInput(event.target.value)}
+              onKeyDown={event => {
+                if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+                  event.preventDefault();
+                  if (canSend) event.currentTarget.form.requestSubmit();
+                }
+              }} />
+            <button type="submit" disabled={!canSend || !input.trim()} aria-label="Envoyer le message">↑</button>
+          </form>
+          <p className="keyboard-help">Entrée pour envoyer · Maj + Entrée pour aller à la ligne</p>
+          <p className="composer-note"><span className="mobile-copy">Pas d’informations personnelles ou confidentielles. </span>Mimi peut se tromper.<span className="desktop-copy"> Garde un regard curieux et critique.</span></p>
+        </footer>
+      </section>
     </main>
   );
 }

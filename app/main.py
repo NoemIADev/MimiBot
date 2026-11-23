@@ -1,8 +1,10 @@
 import os
+from contextlib import closing
 
 from dotenv import load_dotenv
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from db import get_db_connection, save_qa_history, get_recent_qa_history
@@ -45,6 +47,29 @@ def root():
         "message": "API Mimi OK",
         "allowed_origins": allowed_origins,
     }
+
+
+@app.get("/health")
+def health():
+    """Check API/database readiness without calling embeddings or the LLM."""
+    try:
+        with closing(get_db_connection()) as conn:
+            with conn.cursor() as cur:
+                cur.execute("SET statement_timeout = '3s'")
+                cur.execute("SELECT 1")
+                if cur.fetchone() != (1,):
+                    raise RuntimeError("Unexpected database health result")
+    except Exception:
+        # Never expose connection strings or database errors to the browser.
+        return JSONResponse(
+            status_code=503,
+            content={"status": "unavailable", "api": "ok", "database": "unavailable"},
+            headers={"Cache-Control": "no-store"},
+        )
+    return JSONResponse(
+        content={"status": "ok", "api": "ok", "database": "ok"},
+        headers={"Cache-Control": "no-store"},
+    )
 
 
 @app.post("/ask_mimi")
