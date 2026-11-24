@@ -1,8 +1,8 @@
 import os
 from contextlib import closing
-
+from limit import compter_message
 from dotenv import load_dotenv
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
@@ -73,25 +73,30 @@ def health():
 
 
 @app.post("/ask_mimi")
-def ask_mimi(data: QuestionRequest):
-    history = get_recent_qa_history(data.session_id)
+def ask_mimi(data: QuestionRequest, request: Request):
+    if request.client is None:
+        raise HTTPException(status_code=503, detail="Adresse client indisponible.")
+    with compter_message(data.session_id, request.client.host):
+        history = get_recent_qa_history(data.session_id)
 
-    rewritten_query = rewrite_query(data.question, history)
-    print("\n=== QUESTION ORIGINALE ===")
-    print(data.question)
-    print("\n=== QUESTION REFORMULÉE ===")
-    print(rewritten_query)
+        rewritten_query = rewrite_query(data.question, history)
+        print("\n=== QUESTION ORIGINALE ===")
+        print(data.question)
+        print("\n=== QUESTION REFORMULÉE ===")
+        print(rewritten_query)
 
-    chunks = retrieve_bdd(rewritten_query)
+        chunks = retrieve_bdd(rewritten_query)
 
-    system_prompt, user_prompt = build_prompt(
-        question=data.question,
-        chunks=chunks,
-        history=history,
-    )
+        system_prompt, user_prompt = build_prompt(
+            question=data.question,
+            chunks=chunks,
+            history=history,
+        )
 
-    answer = ask_gpt(system_prompt, user_prompt)
+        answer = ask_gpt(system_prompt, user_prompt)
+        if not answer or not answer.strip():
+            raise HTTPException(status_code=502, detail="Mimi a renvoyé une réponse vide.")
 
-    save_qa_history(data.session_id, data.question, answer)
+        save_qa_history(data.session_id, data.question, answer)
 
-    return {"response": answer}
+        return {"response": answer}
