@@ -99,6 +99,7 @@ export default function App() {
   const [view, setView] = useState('conversation');
   const [input, setInput] = useState('');
   const [isTyping, setIsTyping] = useState(false);
+  const [isStreaming, setIsStreaming] = useState(false);
   const [sessionId, setSessionId] = useState('');
   const [chatMessages, setChatMessages] = useState([]);
   const sending = useRef(false);
@@ -116,7 +117,10 @@ export default function App() {
       id = crypto.randomUUID();
     }
     setSessionId(id);
-    return () => request.current?.abort();
+    return () => {
+      request.current?.abort();
+      request.current = null;
+    };
   }, []);
 
   useEffect(() => {
@@ -140,29 +144,78 @@ export default function App() {
     setInput('');
     setChatMessages(previous => [...previous, { id: crypto.randomUUID(), role: 'user', text: message }]);
     setIsTyping(true);
-    request.current = new AbortController();
-    const timeout = window.setTimeout(() => request.current?.abort(), 120000);
+    const controller = new AbortController();
+    request.current = controller;
+    const timeout = window.setTimeout(() => controller.abort(), 120000);
+    const replyId = crypto.randomUUID();
+    let answer = '';
+    let hasBubble = false;
+    let streamError;
+    function updateReply(text) {
+      const reply = { id: replyId, role: 'bot', text };
+      const replace = hasBubble;
+      hasBubble = true;
+      setChatMessages(previous => replace
+        ? previous.map(item => item.id === replyId ? reply : item)
+        : [...previous, reply]);
+    }
+
     try {
       const response = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ question: message, session_id: sessionId }),
-        signal: request.current.signal,
+        signal: controller.signal,
       });
-      if (!response.ok) throw new Error('Request failed');
-      const data = await response.json();
-      if (typeof data.response !== 'string' || !data.response.trim()) throw new Error('Empty response');
-      setChatMessages(previous => [...previous, { id: crypto.randomUUID(), role: 'bot', text: data.response }]);
+      if (!response.ok || !response.body) throw new Error('Flux indisponible');
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let pending = '';
+      let completed = false;
+      try {
+        while (!completed) {
+          const { done, value } = await reader.read();
+          if (done) throw new Error('Flux interrompu');
+          pending += decoder.decode(value, { stream: true });
+          const lines = pending.split('\n');
+          pending = lines.pop();
+          for (const line of lines) {
+            const event = JSON.parse(line);
+            if (event.type === 'error') {
+              streamError = event.message;
+              throw new Error('Réponse interrompue');
+            }
+            if (event.type === 'done') {
+              if (!answer.trim()) throw new Error('Réponse vide');
+              completed = true;
+              break;
+            }
+            if (event.type === 'delta') {
+              if (!hasBubble) setIsStreaming(true);
+              answer += event.text;
+              updateReply(answer);
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
     } catch {
-      setChatMessages(previous => [...previous, {
-        id: crypto.randomUUID(), role: 'bot',
-        text: 'Désolée, je n’ai pas pu répondre pour le moment. Tu peux réessayer dans un instant.',
-      }]);
-      setInput(previous => previous || message);
+      if (request.current === controller) {
+        const error = streamError || 'Désolée, je n’ai pas pu répondre pour le moment. Tu peux réessayer dans un instant.';
+        updateReply(answer ? `${answer.trimEnd()}\n\nRéponse interrompue. ${error}` : error);
+        setInput(previous => previous || message);
+      }
     } finally {
       window.clearTimeout(timeout);
-      sending.current = false;
-      setIsTyping(false);
+      controller.abort();
+      if (request.current === controller) {
+        request.current = null;
+        sending.current = false;
+        setIsTyping(false);
+        setIsStreaming(false);
+      }
     }
   }
 
@@ -196,7 +249,7 @@ export default function App() {
           <div className="messages" role="log" aria-label="Messages" aria-live="polite" aria-relevant="additions">
             {chatMessages.map(message => <ChatMessage key={message.id} {...message} />)}
           </div>
-          {isTyping && <div className="typing" role="status"><Avatar /><p>Mimi réfléchit<span aria-hidden="true">…</span></p></div>}
+          {isTyping && !isStreaming && <div className="typing" role="status"><Avatar /><p>Mimi réfléchit<span aria-hidden="true">…</span></p></div>}
         </div>
         <footer className="composer">
           {availability === 'unavailable' && <p className="connection-notice" role="status">Mimi est momentanément indisponible. Tu peux toujours explorer le portfolio.</p>}

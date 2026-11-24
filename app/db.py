@@ -1,4 +1,5 @@
 import os
+from contextlib import closing
 
 import psycopg2
 import config  # Load local env files before resolving the connection string.
@@ -12,15 +13,18 @@ def get_db_connection():
 
 
 
-def save_qa_history(session_id, question, answer):
+def save_qa_history(session_id, question, answer, connection=None):
+    if connection is None:
+        with closing(get_db_connection()) as conn, conn:
+            save_qa_history(session_id, question, answer, connection=conn)
+        return
+
     from embeddings import get_embedding
 
     question_embedding = get_embedding(question)
     vector_str = "[" + ",".join(str(x) for x in question_embedding) + "]"
 
-    conn = get_db_connection()
-
-    with conn.cursor() as cur:
+    with connection.cursor() as cur:
         cur.execute(
             """
             INSERT INTO qa_history (session_id, question, question_embedding, answer)
@@ -28,9 +32,6 @@ def save_qa_history(session_id, question, answer):
             """,
             (session_id, question, vector_str, answer),
         )
-
-    conn.commit()
-    conn.close()
 
 
 def get_recent_qa_history(session_id, limit=10):

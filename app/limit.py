@@ -1,6 +1,5 @@
 import hmac
 import os
-from collections.abc import Iterator
 from contextlib import closing, contextmanager
 
 from fastapi import HTTPException
@@ -9,8 +8,8 @@ from db import get_db_connection
 
 
 @contextmanager
-def compter_message(session_id: str, adresse_ip: str) -> Iterator[None]:
-    """Limite Mimi à 30 messages par session et 60 par IP par jour."""
+def compter_message(session_id: str, adresse_ip: str):
+    """Réserve les quotas et fournit la transaction où enregistrer la réponse."""
 
     if not session_id.strip() or len(session_id) > 255:
         raise HTTPException(
@@ -71,7 +70,5 @@ def compter_message(session_id: str, adresse_ip: str) -> Iterator[None]:
                             ),
                         )
 
-            # 3. Laisser ask_mimi traiter la question.
-            # En sortant du bloc, psycopg2 valide les deux +1 si tout a réussi.
-            # Si une erreur remonte, il annule les deux +1.
-            yield
+            # L'historique et les deux compteurs sont validés ensemble.
+            yield connexion

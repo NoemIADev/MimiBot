@@ -1,7 +1,8 @@
 import os
 from pathlib import Path
+from anyio import CancelScope
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import AsyncOpenAI, OpenAI
 import re
 
 from embeddings import get_embedding
@@ -15,6 +16,11 @@ load_dotenv(BASE_DIR / ".env")
 client = OpenAI(
     api_key=os.getenv("OPENROUTER_API_KEY"),
     base_url=os.getenv("OPENROUTER_BASE_URL"),
+)
+stream_client = AsyncOpenAI(
+    api_key=os.getenv("OPENROUTER_API_KEY"),
+    base_url=os.getenv("OPENROUTER_BASE_URL"),
+    timeout=120.0,
 )
 
 def rewrite_query(question, history):
@@ -224,6 +230,33 @@ def ask_gpt(system_prompt, user_prompt):
     content = re.sub(r"\*(.*?)\*", r"\1", content)
     content = content.replace("•", "-")
     return content.strip()
+
+
+async def stream_gpt(system_prompt, user_prompt):
+    stream = await stream_client.chat.completions.create(
+        model=os.getenv("OPENROUTER_LLM_MODEL"),
+        messages=[
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ],
+        temperature=0.5,
+        stream=True,
+    )
+    finished = False
+    try:
+        async for chunk in stream:
+            for choice in chunk.choices:
+                if choice.finish_reason is not None:
+                    if choice.finish_reason != "stop":
+                        raise RuntimeError("Génération OpenRouter interrompue.")
+                    finished = True
+                if choice.delta and choice.delta.content:
+                    yield choice.delta.content.replace("*", "").replace("•", "-")
+    finally:
+        with CancelScope(shield=True):
+            await stream.close()
+    if not finished:
+        raise RuntimeError("Flux OpenRouter interrompu.")
 
 
 def ask_mimi_rag(question):

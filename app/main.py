@@ -1,17 +1,61 @@
+import json
+import logging
 import os
-from contextlib import closing
+import sys
+from contextlib import aclosing, asynccontextmanager, closing
+
+import anyio
 from limit import compter_message
 from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 
 from db import get_db_connection, save_qa_history, get_recent_qa_history
-from rag import retrieve_bdd, build_prompt, ask_gpt, rewrite_query
+from rag import retrieve_bdd, build_prompt, stream_gpt, rewrite_query
 load_dotenv()
 
 app = FastAPI()
+logger = logging.getLogger(__name__)
+
+# Les attentes de quota ont leur propre limite de workers pour laisser les
+# transactions déjà ouvertes avancer et libérer leurs verrous.
+quota_workers = anyio.CapacityLimiter(8)
+
+
+class MimiStream(StreamingResponse):
+    async def __call__(self, scope, receive, send):
+        async with anyio.create_task_group() as tasks:
+            async def watch_disconnect():
+                while (await receive())["type"] != "http.disconnect":
+                    pass
+                tasks.cancel_scope.cancel()
+
+            tasks.start_soon(watch_disconnect)
+            try:
+                await self.stream_response(send)
+            finally:
+                tasks.cancel_scope.cancel()
+                with anyio.CancelScope(shield=True):
+                    await self.body_iterator.aclose()
+
+
+@asynccontextmanager
+async def transaction_reponse(session_id, adresse_ip):
+    transaction = compter_message(session_id, adresse_ip)
+    connexion = await anyio.to_thread.run_sync(transaction.__enter__, limiter=quota_workers)
+    try:
+        yield connexion
+        await anyio.lowlevel.checkpoint()
+    finally:
+        exception = sys.exc_info()
+        with anyio.CancelScope(shield=True):
+            await anyio.to_thread.run_sync(transaction.__exit__, *exception)
+
+
+def stream_event(event_type, **data):
+    return json.dumps({"type": event_type, **data}, ensure_ascii=False) + "\n"
 
 
 def get_allowed_origins():
@@ -76,27 +120,50 @@ def health():
 def ask_mimi(data: QuestionRequest, request: Request):
     if request.client is None:
         raise HTTPException(status_code=503, detail="Adresse client indisponible.")
-    with compter_message(data.session_id, request.client.host):
-        history = get_recent_qa_history(data.session_id)
+    adresse_ip = request.client.host
 
-        rewritten_query = rewrite_query(data.question, history)
-        print("\n=== QUESTION ORIGINALE ===")
-        print(data.question)
-        print("\n=== QUESTION REFORMULÉE ===")
-        print(rewritten_query)
+    async def events():
+        try:
+            async with transaction_reponse(data.session_id, adresse_ip) as connexion:
+                history = await anyio.to_thread.run_sync(get_recent_qa_history, data.session_id)
+                rewritten_query = await anyio.to_thread.run_sync(rewrite_query, data.question, history)
+                print("\n=== QUESTION ORIGINALE ===")
+                print(data.question)
+                print("\n=== QUESTION REFORMULÉE ===")
+                print(rewritten_query)
 
-        chunks = retrieve_bdd(rewritten_query)
+                chunks = await anyio.to_thread.run_sync(retrieve_bdd, rewritten_query)
+                system_prompt, user_prompt = build_prompt(
+                    question=data.question,
+                    chunks=chunks,
+                    history=history,
+                )
 
-        system_prompt, user_prompt = build_prompt(
-            question=data.question,
-            chunks=chunks,
-            history=history,
-        )
+                parts = []
+                async with aclosing(stream_gpt(system_prompt, user_prompt)) as stream:
+                    async for part in stream:
+                        if not parts:
+                            part = part.lstrip()
+                        if part:
+                            parts.append(part)
+                            yield stream_event("delta", text=part)
 
-        answer = ask_gpt(system_prompt, user_prompt)
-        if not answer or not answer.strip():
-            raise HTTPException(status_code=502, detail="Mimi a renvoyé une réponse vide.")
+                answer = "".join(parts).rstrip()
+                if not answer:
+                    raise HTTPException(status_code=502, detail="Mimi a renvoyé une réponse vide.")
 
-        save_qa_history(data.session_id, data.question, answer)
+                await anyio.to_thread.run_sync(
+                    save_qa_history, data.session_id, data.question, answer, connexion
+                )
+            yield stream_event("done")
+        except HTTPException as exc:
+            yield stream_event("error", message=exc.detail)
+        except Exception:
+            logger.exception("Échec de la réponse de Mimi")
+            yield stream_event("error", message="Désolée, je n’ai pas pu répondre pour le moment. Tu peux réessayer dans un instant.")
 
-        return {"response": answer}
+    return MimiStream(
+        events(),
+        media_type="application/x-ndjson",
+        headers={"Cache-Control": "no-cache, no-transform", "X-Accel-Buffering": "no"},
+    )
